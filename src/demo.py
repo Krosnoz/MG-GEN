@@ -5,12 +5,12 @@ import os
 import gradio as gr
 
 from utility.const import SUCCESS, ERROR
-from config.config_logomotion import Gemini_CONF
+from config.config_logomotion import AI_CONF
 from inference_batch import main
 import tempfile
 
 EXP_DIR = "../results/gradio"
-NUM_GENERATION = Gemini_CONF.num_generation
+NUM_GENERATION = AI_CONF.num_generation
 
 def show_videos(image_path: str):
     ad_id = str(time.time()).replace(".", "") + uuid.uuid4().hex[:6]

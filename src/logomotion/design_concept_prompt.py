@@ -1,6 +1,6 @@
 import re
 
-from config.config_logomotion import Animation_CONF, Gemini_CONF
+from config.config_logomotion import Animation_CONF, AI_CONF
 
 class PopupAnimation:
     @staticmethod

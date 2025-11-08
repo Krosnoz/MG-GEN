@@ -3,8 +3,8 @@ import json
 
 from copy import deepcopy
 from omegaconf import OmegaConf
-from gemini.chat import Gemini, GenerateContentConfig
-from config.config_logomotion import Gemini_CONF
+from ai_client.chat import OpenRouterClient
+from config.config_logomotion import AI_CONF
 
 
 def set_id(layer_id):
@@ -92,14 +92,24 @@ Output conditions are as follows:
 ```
         """
 
-        gemini_client = Gemini()
-        result_json = gemini_client.client.models.generate_content(
-            model = gemini_client.model_name,
-            contents = [prompt, gemini_client.upload_image(image)],
-            config = GenerateContentConfig(
-                temperature=0.0,
-                response_mime_type="application/json",
-            )
+        client = OpenRouterClient()
+        image_base64 = client.upload_image(image)
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+                    }
+                ]
+            }
+        ]
+        result_json = client.generate_content(
+            messages,
+            temperature=0.0,
+            response_format={"type": "json_object"}
         ).text
 
         try:

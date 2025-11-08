@@ -13,7 +13,7 @@ from modules.hisam.inference import HiSam_Inference
 from modules.ocr.main import PaddleOCRClient
 from modules.layout.yolo import Yolo_Client
 from ultralytics import SAM
-from gemini.chat import Gemini
+from ai_client.chat import OpenRouterClient
 
 from .extract_text_layer import _extract_text_layer2, crop_transparent, xywh2xyxy
 
@@ -236,11 +236,21 @@ class ADImageHTML_Client:
 			layer_image.save(os.path.join(self.data_dir, "html_images", f"{i_id+1000}.png"))
 
 			try:
-				gemini_client = Gemini()
-				alt = gemini_client.client.models.generate_content(
-					model = gemini_client.model_name,
-					contents = ["Describe the image's contents and details in about 30 words in English.", gemini_client.upload_image(text_layer_removed_image.crop(xywh2xyxy(bbox)))],
-				).text		
+				client = OpenRouterClient()
+				image_base64 = client.upload_image(text_layer_removed_image.crop(xywh2xyxy(bbox)))
+				messages = [
+					{
+						"role": "user",
+						"content": [
+							{"type": "text", "text": "Describe the image's contents and details in about 30 words in English."},
+							{
+								"type": "image_url",
+								"image_url": {"url": f"data:image/png;base64,{image_base64}"}
+							}
+						]
+					}
+				]
+				alt = client.generate_content(messages).text		
 			except:
 				alt = f"a simple image layer"
 

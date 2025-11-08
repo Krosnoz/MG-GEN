@@ -1,8 +1,8 @@
 import re
 import concurrent.futures
 
-from gemini.chat import Gemini, GenerateContentConfig
-from config.config_logomotion import Animation_CONF, Gemini_CONF
+from ai_client.chat import OpenRouterClient
+from config.config_logomotion import Animation_CONF, AI_CONF
 from .design_concept_util import LayerManeger
 from .design_concept_prompt import PopupAnimation
 
@@ -36,15 +36,22 @@ class ConceptGenerator:
         prompt = prompt.replace("[ANIMATION_SCRIPT]", animation_script)
         prompt = prompt.replace("[ANIMATION_IDEA_EDIT]", animation_concept_edit)
 
-        ## Gemini呼び出し
-        gemini_client = Gemini()
-        res = gemini_client.client.models.generate_content(
-            model = gemini_client.model_name,
-            contents = [prompt, gemini_client.upload_image(image)],
-            config = GenerateContentConfig(
-                temperature=0.0,
-            )
-        ).text
+        ## AI呼び出し
+        client = OpenRouterClient()
+        image_base64 = client.upload_image(image)
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+                    }
+                ]
+            }
+        ]
+        res = client.generate_content(messages, temperature=0.0).text
 
 
         ## 後処理
@@ -78,8 +85,8 @@ class ConceptGenerator:
             "animation_concept_edit": animation_concept_edit
         }
 
-        num_generation = Gemini_CONF.num_generation
-        num_threads = Gemini_CONF.num_threads
+        num_generation = AI_CONF.num_generation
+        num_threads = AI_CONF.num_threads
 
         if num_generation == 1:
             results = [cls._generate_concept(args_dict)]
