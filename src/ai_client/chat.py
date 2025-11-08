@@ -72,9 +72,158 @@ class OpenRouterClient:
 
     def edit_image_with_mask(self, image: PILImage.Image, mask: PILImage.Image, prompt: str) -> PILImage.Image:
         """
-        Perform image edit/inpainting using OpenRouter Images API compatible with OpenAI.
+        Perform image edit/inpainting using OpenRouter API.
+        For Gemini models: Uses chat/completions API with multiple images.
+        For OpenAI-compatible models: Uses images.edits API.
         The mask specifies regions to edit. Unmasked regions must remain unchanged.
         """
+        # Check if this is a Gemini model
+        is_gemini = "gemini" in self.model_name.lower()
+        
+        if is_gemini:
+            # Gemini models use chat/completions API with multiple images
+            return self._edit_image_gemini(image, mask, prompt)
+        else:
+            # OpenAI-compatible models use images.edits API
+            return self._edit_image_openai(image, mask, prompt)
+    
+    def _edit_image_gemini(self, image: PILImage.Image, mask: PILImage.Image, prompt: str) -> PILImage.Image:
+        """Edit image using Gemini chat/completions API with multiple images."""
+        # Prepare images as base64
+        image_base64 = self.upload_image(image)
+        
+        # Prepare mask as base64 (convert to RGB for better compatibility)
+        if mask.mode != "RGB":
+            mask_rgb = mask.convert("RGB")
+        else:
+            mask_rgb = mask
+        mask_base64 = self.upload_image(mask_rgb)
+        
+        # Create messages with both images
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"{prompt}\n\nUse the first image as the base image and the second image as a mask indicating which regions to edit. The white areas in the mask should be edited according to the prompt, while black areas should remain unchanged."
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{mask_base64}"}
+                    }
+                ]
+            }
+        ]
+        
+        # Call chat/completions with image modality
+        # OpenRouter requires modalities parameter, which may need to be passed via extra_body
+        try:
+            # Try with extra_body first (OpenAI SDK >= 1.0)
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                extra_body={"modalities": ["image", "text"]},
+            )
+        except (TypeError, AttributeError):
+            # Fallback: use requests directly for OpenRouter-specific parameters
+            import requests
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+            
+            response_data = requests.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model_name,
+                    "messages": messages,
+                    "modalities": ["image", "text"],
+                }
+            )
+            response_data.raise_for_status()
+            response_json = response_data.json()
+            
+            # Convert response to match OpenAI SDK format
+            class MockResponse:
+                def __init__(self, data):
+                    self.choices = [MockChoice(data.get("choices", [{}])[0])] if data.get("choices") else []
+            
+            class MockChoice:
+                def __init__(self, choice_data):
+                    self.message = MockMessage(choice_data.get("message", {}))
+            
+            class MockMessage:
+                def __init__(self, msg_data):
+                    self.content = msg_data.get("content", "")
+                    self.images = msg_data.get("images", [])
+            
+            response = MockResponse(response_json)
+        
+        # Extract image from response
+        message = response.choices[0].message if response.choices else None
+        if not message:
+            raise RuntimeError("Image edit returned no response")
+        
+        # Check for images in the response
+        images = None
+        if hasattr(message, "images"):
+            images = message.images
+        elif isinstance(message, dict) and "images" in message:
+            images = message["images"]
+        
+        if images:
+            # Get first image
+            image_data = images[0] if isinstance(images, list) else images
+            
+            # Extract image URL from various formats
+            image_url = None
+            if isinstance(image_data, dict):
+                if "image_url" in image_data:
+                    img_url_obj = image_data["image_url"]
+                    if isinstance(img_url_obj, dict) and "url" in img_url_obj:
+                        image_url = img_url_obj["url"]
+                    elif isinstance(img_url_obj, str):
+                        image_url = img_url_obj
+                elif "url" in image_data:
+                    image_url = image_data["url"]
+            elif hasattr(image_data, "image_url"):
+                if hasattr(image_data.image_url, "url"):
+                    image_url = image_data.image_url.url
+                else:
+                    image_url = str(image_data.image_url)
+            
+            if not image_url:
+                raise RuntimeError(f"Unexpected image format in response: {type(image_data)}")
+            
+            # Extract base64 from data URL
+            if image_url.startswith("data:image"):
+                base64_data = image_url.split(",", 1)[1]
+            elif image_url.startswith("http"):
+                # If it's a URL, download it
+                import requests
+                img_response = requests.get(image_url)
+                img_response.raise_for_status()
+                edited_bytes = img_response.content
+                return PILImage.open(io.BytesIO(edited_bytes)).convert("RGB")
+            else:
+                # Assume it's already base64
+                base64_data = image_url
+            
+            edited_bytes = base64.b64decode(base64_data)
+            return PILImage.open(io.BytesIO(edited_bytes)).convert("RGB")
+        else:
+            # Debug: print response structure
+            raise RuntimeError(f"Image edit returned no image data. Response structure: {type(message)}, has images attr: {hasattr(message, 'images')}, content: {getattr(message, 'content', 'N/A')[:200]}")
+    
+    def _edit_image_openai(self, image: PILImage.Image, mask: PILImage.Image, prompt: str) -> PILImage.Image:
+        """Edit image using OpenAI-compatible images.edits API."""
         # Prepare image bytes
         img_bytes = io.BytesIO()
         image.save(img_bytes, format="PNG")
