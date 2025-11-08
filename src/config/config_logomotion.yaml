@@ -7,6 +7,11 @@ Animation_CONF_default:
 AI_CONF_default1:
   num_generation: 3
   num_threads: 1
+  provider: openrouter
+  rag:
+    enabled: false
+  ocr:
+    deepseek_refine: false
   textgroup:
     temperature: 0.0
   animation:

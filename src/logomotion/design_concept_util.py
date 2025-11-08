@@ -3,7 +3,7 @@ import json
 
 from copy import deepcopy
 from omegaconf import OmegaConf
-from ai_client.chat import OpenRouterClient
+from ai_client.provider import get_text_client
 from config.config_logomotion import AI_CONF
 
 
@@ -92,7 +92,7 @@ Output conditions are as follows:
 ```
         """
 
-        client = OpenRouterClient()
+        client = get_text_client()
         image_base64 = client.upload_image(image)
         messages = [
             {

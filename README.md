@@ -23,7 +23,7 @@ playwright install
 Download anime.min.js
 ```
 mkdir src/libs/
-curl -o src/libs/anime.min.js https://raw.githubusercontent.com/juliangarnier/anime/3.2.0/lib/anime.min.js
+curl -o src/libs/anime.min.js https://raw.githubusercontent.com/juliangarnier/anime/v4.2.2/lib/anime.min.js
 ```
 
 Download the weights from GCS.
@@ -45,6 +45,19 @@ Optional (customize endpoint and model):
 ```
 echo "OPENROUTER_BASE_URL=\"https://openrouter.ai/api/v1\"" >> .env
 echo "OPENROUTER_MODEL=\"openrouter/polaris-alpha\"" >> .env
+```
+
+Optional (enable alternative providers and retrieval):
+```
+# Optional: Hugging Face token for DeepSeek-OCR remote inference
+echo "HF_TOKEN=\"your-hf-token\"" >> .env
+
+# DeepSeek-OCR remote (RunPod or custom) endpoint
+echo "DEEPSEEK_OCR_URL=\"https://your-deepseek-server/infer\"" >> .env
+
+# OpenRouter models (text + vision)
+echo "OPENROUTER_MODEL_TEXT=\"openrouter/polaris-alpha\"" >> .env
+echo "OPENROUTER_MODEL_VISION=\"google/gemini-2.5-flash-image\"" >> .env
 ```
 
 Start a gradio demo sever.
@@ -74,3 +87,7 @@ This project is licensed under the [GNU Affero General Public License v3.0 (AGPL
   year={2025}
 }
 ```
+
+## Notes on Provider and OCR
+- The animation script generator uses OpenRouter by default; set `OPENROUTER_MODEL` (default: `google/gemini-2.5-flash-image`).
+- Optional DeepSeek-OCR refinement affects text content only (not geometry). Enable via `AI_CONF_default1.ocr.deepseek_refine: true` and set `DEEPSEEK_OCR_URL` (and `HF_TOKEN` if needed).

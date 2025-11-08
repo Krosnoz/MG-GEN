@@ -14,6 +14,9 @@ from modules.ocr.main import PaddleOCRClient
 from modules.layout.yolo import Yolo_Client
 from ultralytics import SAM
 from ai_client.chat import OpenRouterClient
+from ai_client.provider import get_vision_client
+from config.config_logomotion import AI_CONF
+from modules.ocr.deepseek_refine import DeepSeekOCRRefiner
 
 from .extract_text_layer import _extract_text_layer2, crop_transparent, xywh2xyxy
 
@@ -93,6 +96,11 @@ class ADImageHTML_Client:
 
 		## テキストのOCR
 		ocr_text_list, ocr_text_mask  = PaddleOCRClient().run_ocr(self.pil_image)
+		if getattr(getattr(AI_CONF, "ocr", {}), "deepseek_refine", False):
+			try:
+				ocr_text_list = DeepSeekOCRRefiner().refine(ocr_text_list, self.pil_image)
+			except Exception:
+				pass
 		ocr_text_mask.save(os.path.join(self.data_dir, "debug_images", "ocr_mask.png"))
 
 
@@ -181,7 +189,7 @@ class ADImageHTML_Client:
 
 				layer_list = layer_list + [layer_image]
 				bbox_list = bbox_list + [bbox]
-				mask_list = mask_list + [mask_list]
+				mask_list = mask_list + [mask_image]
 
 
 		# YoLoで取得したPictureLayerのbboxを条件にSAM2でマスクを推定
@@ -195,7 +203,7 @@ class ADImageHTML_Client:
 
 				layer_list = layer_list + [layer_image]
 				bbox_list = bbox_list + [bbox]
-				mask_list = mask_list + [mask_list]
+				mask_list = mask_list + [mask_image]
 
 		if len(layer_list) > 0:
 			concatenate_images_horizontally(layer_list).save(os.path.join(self.data_dir, "debug_images", "layer_image_only.png"))
@@ -203,11 +211,19 @@ class ADImageHTML_Client:
 
 		## 背景レイヤーの生成
 		if len(layer_list) > 0:
-			inpaint_mask = Image.fromarray(inpaint_mask.astype(np.uint8), mode='L')
-			bg_only_image, masked_image, mask = LaMa(model_path="../weights/big-lama.pt").remove_text_by_mask(
-				text_layer_removed_image,
-				inpaint_mask
-			)
+			inpaint_mask_img = Image.fromarray(inpaint_mask.astype(np.uint8), mode='L')
+			try:
+				vision_client = get_vision_client()
+				bg_only_image = vision_client.edit_image_with_mask(
+					image=text_layer_removed_image.convert("RGBA"),
+					mask=inpaint_mask_img,
+					prompt="Remove the masked regions and inpaint the background seamlessly. Keep all unmasked content unchanged."
+				)
+			except Exception:
+				bg_only_image, _, _ = LaMa(model_path="../weights/big-lama.pt").remove_text_by_mask(
+					text_layer_removed_image,
+					inpaint_mask_img
+				)
 		else:
 			bg_only_image = text_layer_removed_image.copy()
 		
@@ -236,7 +252,7 @@ class ADImageHTML_Client:
 			layer_image.save(os.path.join(self.data_dir, "html_images", f"{i_id+1000}.png"))
 
 			try:
-				client = OpenRouterClient()
+				client = get_vision_client()
 				image_base64 = client.upload_image(text_layer_removed_image.crop(xywh2xyxy(bbox)))
 				messages = [
 					{

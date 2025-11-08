@@ -70,3 +70,39 @@ class OpenRouterClient:
         
         return ResponseWrapper(response)
 
+    def edit_image_with_mask(self, image: PILImage.Image, mask: PILImage.Image, prompt: str) -> PILImage.Image:
+        """
+        Perform image edit/inpainting using OpenRouter Images API compatible with OpenAI.
+        The mask specifies regions to edit. Unmasked regions must remain unchanged.
+        """
+        # Prepare image bytes
+        img_bytes = io.BytesIO()
+        image.save(img_bytes, format="PNG")
+        img_bytes.seek(0)
+        img_bytes.name = "image.png"  # required by OpenAI images API
+
+        # Prepare mask: convert L mask (0/255) to RGBA transparency mask where alpha=0 => edit region
+        if mask.mode != "L":
+            mask = mask.convert("L")
+        # Create an RGBA mask where edited regions are transparent
+        alpha = mask.point(lambda p: 255 - p)  # invert: 255->0 (edit), 0->255 (keep)
+        rgba_mask = PILImage.new("RGBA", mask.size, (0, 0, 0, 0))
+        rgba_mask.putalpha(alpha)
+
+        mask_bytes = io.BytesIO()
+        rgba_mask.save(mask_bytes, format="PNG")
+        mask_bytes.seek(0)
+        mask_bytes.name = "mask.png"
+
+        result = self.client.images.edits.create(
+            model=self.model_name,
+            image=[img_bytes],
+            mask=mask_bytes,
+            prompt=prompt,
+        )
+        # Parse base64 output
+        b64 = result.data[0].b64_json if getattr(result, "data", None) else None
+        if not b64:
+            raise RuntimeError("Image edit returned no data")
+        edited_bytes = base64.b64decode(b64)
+        return PILImage.open(io.BytesIO(edited_bytes)).convert("RGB")

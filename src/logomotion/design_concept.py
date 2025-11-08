@@ -1,7 +1,7 @@
 import re
 import concurrent.futures
 
-from ai_client.chat import OpenRouterClient
+from ai_client.provider import get_text_client
 from config.config_logomotion import Animation_CONF, AI_CONF
 from .design_concept_util import LayerManeger
 from .design_concept_prompt import PopupAnimation
@@ -30,14 +30,16 @@ class ConceptGenerator:
         prompt = PopupAnimation.get_prompt(prompt_lang=prompt_lang)
         script_postprocess = PopupAnimation.script_postprocess
         
+        rag_context = ""
         prompt = prompt.replace("[IMAGE_HTML]", html)
         prompt = prompt.replace("[LAYER_INFO]", grouped_config)
         prompt = prompt.replace("[ANIMATION_IDEA]", animation_concept)
         prompt = prompt.replace("[ANIMATION_SCRIPT]", animation_script)
         prompt = prompt.replace("[ANIMATION_IDEA_EDIT]", animation_concept_edit)
+        prompt = prompt.replace("[RAG_CONTEXT]", rag_context)
 
         ## AI呼び出し
-        client = OpenRouterClient()
+        client = get_text_client()
         image_base64 = client.upload_image(image)
         messages = [
             {
@@ -79,7 +81,7 @@ class ConceptGenerator:
             "html": html, 
             "psd_config": psd_config, 
             "image": image, 
-            "prompt_lang": "jp",
+            "prompt_lang": "en",
             "animation_concept": animation_concept,
             "animation_script": animation_script,
             "animation_concept_edit": animation_concept_edit
