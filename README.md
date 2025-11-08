@@ -34,9 +34,17 @@ unzip weights.zip
 ```
 
 # Generate motion graphics from images
-Set your Gemini API_KEY in `.env`. You can get an API key for free from [Google AI Studio](https://aistudio.google.com/apikey). (20250331)
+Set your OpenRouter API_KEY in `.env`. You can get an API key from [OpenRouter](https://openrouter.ai/). The default model is `openrouter/polaris-alpha`, but you can customize it using environment variables.
+
+Required:
 ```
-echo "GEMINI_APIKEY=\"your-api-key\"" > .env
+echo "OPENROUTER_API_KEY=\"your-api-key\"" > .env
+```
+
+Optional (customize endpoint and model):
+```
+echo "OPENROUTER_BASE_URL=\"https://openrouter.ai/api/v1\"" >> .env
+echo "OPENROUTER_MODEL=\"openrouter/polaris-alpha\"" >> .env
 ```
 
 Start a gradio demo sever.
